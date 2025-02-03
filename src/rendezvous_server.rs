@@ -45,6 +45,10 @@ use std::{
     time::Instant,
 };
 
+use reqwest::Client;
+use serde_json::json;
+use std::env;
+
 #[derive(Clone, Debug)]
 enum Data {
     Msg(Box<RendezvousMessage>, SocketAddr),
@@ -842,12 +846,26 @@ impl RendezvousServer {
             .to_uppercase()
             == "Y"
         {
-            let mut msg_out = RendezvousMessage::new();
-            msg_out.set_punch_hole_response(PunchHoleResponse {
-                other_failure: String::from("The connection is not allowed. You have not logged in."),
-                ..Default::default()
-            });
-            return Ok((msg_out, None));
+            let api_endpoint = env::var("API_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:21114".to_string());
+            let api_url = api_endpoint + "/api/currentUser";
+            let client = Client::new();
+            let res = client.post(&api_url)
+                .bearer_auth(ph.token)
+                .json(&json!({ "id": ph.id, "uuid": "uuid" }))
+                .send()
+                .await?;
+            if res.status().is_success() {
+                let response_body: serde_json::Value = res.json().await?;
+                println!("Username: {}", response_body["name"]);
+            } else {
+                println!("Error: {}", res.status());
+                let mut msg_out = RendezvousMessage::new();
+                msg_out.set_punch_hole_response(PunchHoleResponse {
+                    other_failure: String::from("The connection is not allowed. You have not logged in."),
+                    ..Default::default()
+                });
+                return Ok((msg_out, None));
+            }
         }
         let id = ph.id;
         // punch hole request from A, relay to B,
