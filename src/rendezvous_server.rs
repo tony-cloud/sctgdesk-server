@@ -529,6 +529,47 @@ impl RendezvousServer {
                     msg_out.set_test_nat_response(res);
                     Self::send_to_sink(sink, msg_out).await;
                 }
+                Some(rendezvous_message::Union::OnlineRequest(or)) => {
+                    let mut states: Option<BytesMut> = None;
+                    // web client uses different bit index
+                    if ws {
+                        let mut temp_states = BytesMut::zeroed(or.peers.len() + 1);
+                        for (i, peer_id) in or.peers.iter().enumerate() {
+                            if let Some(peer) = self.pm.get_in_memory(peer_id).await {
+                                let elapsed = peer.read().await.last_reg_time.elapsed().as_millis() as i32;
+                                let states_idx = i / 8;
+                                let bit_idx = 7 - (i % 8);
+                                let bit_mask = 1 << bit_idx;
+                                if elapsed < REG_TIMEOUT {
+                                    temp_states[states_idx] |= bit_mask;
+                                } else {
+                                    temp_states[states_idx] &= !bit_mask;
+                                }
+                            }
+                        }
+                        states = Some(temp_states);
+                    } else {
+                        let mut temp_states = BytesMut::zeroed((or.peers.len() + 7) / 8);
+                        for (i, peer_id) in or.peers.iter().enumerate() {
+                            if let Some(peer) = self.pm.get_in_memory(peer_id).await {
+                                let elapsed = peer.read().await.last_reg_time.elapsed().as_millis() as i32;
+                                let states_idx = i / 8;
+                                let bit_idx = 7 - i % 8;
+                                if elapsed < REG_TIMEOUT {
+                                    temp_states[states_idx] |= 0x01 << bit_idx;
+                                }
+                            }
+                        }
+                        states = Some(temp_states);
+                    }
+                    
+                    let mut msg_out = RendezvousMessage::new();
+                    msg_out.set_online_response(OnlineResponse {
+                        states: states.into(),
+                        ..Default::default()
+                    });
+                    Self::send_to_sink(sink, msg_out).await;
+                }
                 Some(rendezvous_message::Union::RegisterPk(rk)) => {
                     let response = self.handle_register_pk(rk, addr).await;
                     match response {
