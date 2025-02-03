@@ -849,8 +849,8 @@ impl RendezvousServer {
             let mut msg_out = RendezvousMessage::new();
             
             if !ph.token.is_empty() {
-                let api_endpoint = env::var("API_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:21114".to_string());
-                let api_url = api_endpoint + "/api/currentUser";
+                let api_server = env::var("API_SERVER").unwrap_or_else(|_| "http://127.0.0.1:21114".to_string());
+                let api_url = api_server + "/api/currentUser";
                 let client = Client::new();
                 let res = client.post(&api_url)
                     .bearer_auth(ph.token)
