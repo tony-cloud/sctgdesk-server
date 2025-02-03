@@ -841,31 +841,41 @@ impl RendezvousServer {
         }
         // For limiting abuse, only allow logged in users to punch hole
         // if LOGGED_IN_ONLY=Y is set in env or --logged-in-only is passed
-        if ph.token.is_empty() && std::env::var("LOGGED_IN_ONLY")
+        if std::env::var("LOGGED_IN_ONLY")
             .unwrap_or_default()
             .to_uppercase()
             == "Y"
         {
-            let api_endpoint = env::var("API_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:21114".to_string());
-            let api_url = api_endpoint + "/api/currentUser";
-            let client = Client::new();
-            let res = client.post(&api_url)
-                .bearer_auth(ph.token)
-                .json(&json!({ "id": ph.id, "uuid": "uuid" }))
-                .send()
-                .await?;
-            if res.status().is_success() {
-                let response_body: serde_json::Value = res.json().await?;
-                println!("Username: {}", response_body["name"]);
+            let mut msg_out = RendezvousMessage::new();
+            
+            if !ph.token.is_empty() {
+                let api_endpoint = env::var("API_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:21114".to_string());
+                let api_url = api_endpoint + "/api/currentUser";
+                let client = Client::new();
+                let res = client.post(&api_url)
+                    .bearer_auth(ph.token)
+                    .json(&json!({ "id": ph.id, "uuid": "uuid" }))
+                    .send()
+                    .await?;
+                if res.status().is_success() {
+                    let response_body: serde_json::Value = res.json().await?;
+                    log::debug!("Username: {}", response_body["name"]);
+                } else {
+                    log::debug!("Error: {}", res.status());
+                    msg_out.set_punch_hole_response(PunchHoleResponse {
+                        other_failure: String::from("The connection is not allowed. Your session expired."),
+                        ..Default::default()
+                    });
+                    return Ok((msg_out, None));
+                }
             } else {
-                println!("Error: {}", res.status());
-                let mut msg_out = RendezvousMessage::new();
                 msg_out.set_punch_hole_response(PunchHoleResponse {
                     other_failure: String::from("The connection is not allowed. You have not logged in."),
                     ..Default::default()
                 });
                 return Ok((msg_out, None));
             }
+            
         }
         let id = ph.id;
         // punch hole request from A, relay to B,
