@@ -61,6 +61,8 @@ sctgdesk-api-server = { git = "https://github.com/sctg-development/sctgdesk-api-
 rocket = { version = "0.5", features = ["json", "secrets"] }
 num_cpus = "1.16"
 
+reqwest = "0.12.4"
+
 [build-dependencies]
 hbb_common = { path = "libs/hbb_common" }
 
