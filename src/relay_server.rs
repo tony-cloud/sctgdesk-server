@@ -28,6 +28,10 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
+use reqwest::Client;
+use serde_json::json;
+use std::env;
+
 type Usage = (usize, usize, usize, usize);
 
 lazy_static::lazy_static! {
@@ -418,6 +422,31 @@ async fn make_pair_(stream: impl StreamTrait, addr: SocketAddr, key: &str, limit
             if let Some(rendezvous_message::Union::RequestRelay(rf)) = msg_in.union {
                 if !key.is_empty() && rf.licence_key != key {
                     return;
+                }
+                if std::env::var("LOGGED_IN_ONLY")
+                    .unwrap_or_default()
+                    .to_uppercase()
+                    == "Y"
+                {
+                    if !rf.token.is_empty() {
+                        let api_server = env::var("API_SERVER").unwrap_or_else(|_| "http://127.0.0.1:21114".to_string());
+                        let api_url = api_server + "/api/currentUser";
+                        let client = Client::new();
+                        let res = client.post(&api_url)
+                            .bearer_auth(ph.token)
+                            .json(&json!({ "id": ph.id, "uuid": "uuid" }))
+                            .send()
+                            .await?;
+                        if res.status().is_success() {
+                            let response_body: serde_json::Value = res.json().await?;
+                            log::debug!("Username: {}", response_body["name"]);
+                        } else {
+                            log::debug!("Error: {}", res.status());
+                            return;
+                        }
+                    } else {
+                        return;
+                    }
                 }
                 if !rf.uuid.is_empty() {
                     let mut peer = PEERS.lock().await.remove(&rf.uuid);
